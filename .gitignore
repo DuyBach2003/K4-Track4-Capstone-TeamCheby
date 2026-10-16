@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
+# Log và video của từng phiên chạy: chứa mặt người, không đẩy lên repo công khai
+logs/
+recordings/*
+!recordings/.gitkeep
+models/camera_K.npz

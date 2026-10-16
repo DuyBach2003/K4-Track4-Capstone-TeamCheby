@@ -1,0 +1,6 @@
+# Python 3.10-3.12 (MediaPipe chưa hỗ trợ 3.13+)
+opencv-python>=4.9
+mediapipe>=0.10.20
+numpy>=1.26
+matplotlib>=3.8
+pytest>=8
