@@ -88,11 +88,13 @@ def main():
                 vis = hud.draw(frame.copy(), r, pipe.cam, recording, "LIVE" if live else "REPLAY")
                 if args.mirror:
                     vis = cv2.flip(vis, 1)
-                if recording:
+                # Live: FPS ghi phải bằng FPS thật đo được, nếu không video phát nhanh/chậm và "báo sau 1 s"
+                # trong video dự phòng sẽ sai. Đợi 30 frame để có FPS đo được rồi mới mở file.
+                if recording and (not live or len(t_hist) > 30):
                     if writer is None:
                         os.makedirs("recordings", exist_ok=True)
-                        writer = make_writer(f"recordings/demo_{stamp}.mp4", 20 if live else video_fps,
-                                             (vis.shape[1], vis.shape[0]))
+                        fps_out = (len(t_hist) - 1) / (t_hist[-1] - t_hist[0]) if live else video_fps
+                        writer = make_writer(f"recordings/demo_{stamp}.mp4", fps_out, (vis.shape[1], vis.shape[0]))
                     writer.write(vis)
             if args.no_window:
                 continue

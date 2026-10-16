@@ -136,7 +136,26 @@ Phân tích ở mục 5.2 cho thấy một nửa số lỗi là do **kịch bả
 Precision thấp chủ yếu do nhãn lệch giờ: ở v1 người đóng vai nhắm mắt muộn khoảng 2 s và mở muộn khoảng 0.5 s so với lời nhắc, nên frame "đang nhắm" rơi vào đoạn nhãn "mở".
 **Một kết quả không như kỳ vọng:** chỉ dùng blendshape có F1 bằng hoặc cao hơn hệ thống kết hợp. Trên dữ liệu này, EAR chưa chứng minh được là cần thiết. Mình giữ EAR vì nó cá nhân hoá được và giải thích được, nhưng đây là lựa chọn thiết kế, không phải kết luận từ số đo.
 
-**Lần thu 2 (v2, kiểm chứng độc lập):** _đang chờ thu bằng kịch bản đọc to._
+**Lần thu 2: kiểm chứng độc lập hệ thống v2** ([reports/main_bach_20261016_195131](reports/main_bach_20261016_195131/metrics.md), [reports/failure_bach_20261016_195313](reports/failure_bach_20261016_195313/metrics.md)). Thu sau khi v2 đã chốt và push. **Không sửa dòng code nào sau khi xem kết quả.**
+
+| Số đo (lần thu 2) | Kết quả |
+|---|---|
+| Nhắm mắt theo frame, hệ thống: F1 (P / R) | **0.79** (0.71 / 0.90) |
+| Đối chứng, chỉ blendshape: F1 (P / R) | 0.79 (0.74 / 0.85) |
+| `DROWSY`: nhắm mắt 4 s, 3 s, 4 s | **3/3**, trễ 1.7–2.0 s tính từ lời nhắc (gồm ngưỡng 1.0 s + phản ứng của người) |
+| `DISTRACTED`: kịch bản main | **1/3**: nhìn phải ✅ (2.9 s); nhìn trái ❌; cúi xem điện thoại trên đùi ❌ (báo `DROWSY` thay vì `DISTRACTED`) |
+| `DISTRACTED`: kịch bản failure | **2/2**: **chỉ liếc mắt, đầu đứng yên** ✅ (hướng nhìn 43°); quay hẳn ra sau vai ✅ |
+| Báo động giả trong đoạn bình thường | main: **0** trong 44 s. failure: 1 trong 24 s (liếc mắt xuống đồng hồ xe → `DROWSY`) |
+| Tay che một mắt | không báo động ✅ (cách sửa ở v2 giữ được trên dữ liệu mới) |
+| Lấy tay che camera | `UNCERTAIN` 53% thời gian đoạn đó, không báo động ✅ |
+| Độ trễ xử lý (replay) | p50 4.4 ms, p95 5.0 ms |
+
+Đọc kết quả:
+- **Phần góc mắt có ích thật:** đoạn chỉ liếc mắt, đầu đứng yên, được báo xao nhãng. Nếu chỉ dùng góc đầu như v1 thì chắc chắn bỏ sót.
+- **Kịch bản đọc to giảm độ trễ đo được:** `DROWSY` trễ trung bình 1.86 s ở lần 2 so với 2.5 s ở lần 1. Phần quá 1.0 s là thời gian người phản ứng với giọng đọc.
+- **Nhìn trái bị bỏ sót, nhưng hệ thống đo đúng:** xem lại video thì đầu quay khoảng 25° nhưng mắt vẫn nhìn về phía camera, nên hướng nhìn đo được chỉ khoảng 7°. Người đóng vai vẫn liếc về màn hình dù đã có giọng đọc. Nhãn sai, không phải hệ thống sai.
+- **Nhìn xuống (điện thoại trên đùi, đồng hồ xe) bị báo là buồn ngủ.** Đây là ca lỗi chính còn lại (mục 5.2).
+- **Một kết quả không như kỳ vọng:** chỉ dùng blendshape có F1 bằng hệ thống kết hợp (0.79). Trên dữ liệu độc lập, EAR không làm tốt hơn mà cũng không làm kém đi.
 
 ## 5. Ca lỗi
 
@@ -146,11 +165,11 @@ Lần chạy đầu trên webcam, hệ thống báo `FATIGUE` ngay sau khi hiệ
 **Nguyên nhân:** PERCLOS (tỉ lệ thời gian nhắm mắt) được tính trên toàn bộ lịch sử hiện có. Ngay sau hiệu chuẩn, lịch sử chỉ dài vài giây, nên 2–3 lần chớp mắt (mỗi lần khoảng 0.3 s) đã vượt 15%. Đây là lỗi **thống kê trên mẫu quá nhỏ**, không phải lỗi model.
 **Sửa:** chỉ kết luận mệt mỏi khi đã có ít nhất 15 s lịch sử (`perclos_min_history_s`). Có test hồi quy `test_perclos_needs_enough_history_before_fatigue`. Chạy lại 15 s: 0 frame `FATIGUE`.
 
-### 5.2 Ca lỗi thật trên dữ liệu có nhãn (lần thu 1)
+### 5.2 Ca lỗi thật trên dữ liệu có nhãn (phát hiện ở lần thu 1, kiểm tra lại ở lần thu 2)
 
 | Ca | Hệ thống v1 làm gì | Vì sao | Xử lý ở v2 |
 |---|---|---|---|
-| **Cúi xem điện thoại** | báo `DROWSY` (56% frame bị coi là nhắm) thay vì `DISTRACTED` | Khi nhìn xuống, mí mắt trên hạ xuống thật, nên EAR giảm giống như nhắm mắt. Riêng blendshape `eyeBlink` của model vẫn thấy mắt mở (0.30, trong khi lúc nhắm thật là 0.72). | Coi là nhắm chỉ khi EAR **và** blendshape cùng đồng ý: frame bị coi là nhắm giảm từ 56% xuống 6% (bảng từng đoạn trong metrics.md), hết `DROWSY` giả. **Vẫn chưa bắt được là xao nhãng**: đầu chỉ cúi −14°, ngưỡng là −20°, phần lớn việc nhìn xuống là do mắt. Góc mắt theo chiều dọc không đo được, vì mống mắt dịch xuống cả khi nhắm mắt. |
+| **Cúi xem điện thoại** | báo `DROWSY` (56% frame bị coi là nhắm) thay vì `DISTRACTED` | Khi nhìn xuống, mí mắt trên hạ xuống thật, nên EAR giảm giống như nhắm mắt. Riêng blendshape `eyeBlink` của model vẫn thấy mắt mở (0.30, trong khi lúc nhắm thật là 0.72). | Coi là nhắm chỉ khi EAR **và** blendshape cùng đồng ý: frame bị coi là nhắm giảm từ 56% xuống 6% (bảng từng đoạn trong metrics.md), hết `DROWSY` giả. **Lần thu 2 cho thấy chưa đủ:** khi nhìn xuống sâu (điện thoại trên đùi, liếc xuống đồng hồ xe), mí mắt che gần hết mống mắt, cả EAR (0.06–0.10) và blendshape (~0.5) đều thấy như nhắm, nên lại báo `DROWSY`. Xem frame thì người nhìn cũng khó phân biệt với lúc nhắm thật. Đầu chỉ cúi −16°, phần lớn việc nhìn xuống là do mắt. Góc mắt theo chiều dọc không đo được vì mống mắt dịch xuống cả khi nhắm. **Hướng khắc phục:** camera đặt thấp ở cột lái nhìn từ dưới lên (như DMS thật) thì vẫn thấy mống mắt khi nhìn xuống. Dùng hồng ngoại để thấy đồng tử qua khe mí. Về an toàn thì tài xế vẫn **được cảnh báo**, chỉ là sai loại. |
 | **Tay che một mắt** | báo `DROWSY` | Tay đè lên mặt làm cả hai mắt nheo lại (EAR 0.20 / 0.17). Blendshape trung bình hai mắt cũng tăng. | Buồn ngủ là nhắm **cả hai** mắt, nên dùng min của blendshape hai mắt: hết `DROWSY` giả. |
 | **"Quay đầu sang trái/phải" không được báo (0/3)** | yaw đầu chỉ 20° và 31°, chưa vượt 30° liên tục 2 s | Xem ảnh và mống mắt thì **mắt liếc ngược lại về màn hình** (−16°) để đọc lời nhắc và đồng hồ đếm ngược. Hướng nhìn thật chỉ khoảng 3° và 17°. Nhãn "away" sai, lỗi nằm ở **kịch bản thu**. Ngoài ra đồng hồ 2 s bị đặt lại mỗi khi yaw dao động dưới 30°. | Kịch bản v2 đọc to lời nhắc. Hệ thống đo **hướng nhìn** (đầu + mắt) thay vì chỉ góc đầu: quay đầu mà mắt vẫn nhìn đường thì không báo (đúng). Thêm hysteresis 5°. |
 | Nhắm mắt muộn khoảng 2 s so với lời nhắc | độ trễ cảnh báo đo được 1.7–3.3 s thay vì khoảng 1 s theo thiết kế | Người đóng vai phải đọc xong lời nhắc trên màn hình rồi mới nhắm được. | Kịch bản v2 đọc to. |
@@ -161,7 +180,7 @@ Lần chạy đầu trên webcam, hệ thống báo `FATIGUE` ngay sau khi hiệ
 |---|---|---|
 | **Kính râm**, nhắm mắt sau kính | Bỏ sót `DROWSY`, vì MediaPipe vẫn "đoán" mí mắt theo hình mặt trung bình. Camera DMS thật dùng hồng ngoại 940 nm để xuyên qua kính. | **Chưa thử**: lúc thu 1 không có kính râm (xem lại video thì không đeo). |
 | Tắt đèn, ngược sáng | `UNCERTAIN (LOW_LIGHT)`, không báo động giả (có test) | Chưa thử thật: thu trong lớp nên không tắt đèn được. |
-| Quay đầu > 60° | `DISTRACTED`, EAR bị đánh dấu không tin được | Lúc thu 1 người đóng vai không quay đủ. Kịch bản failure v2 có lại đoạn này. |
+| Quay đầu > 60° | `DISTRACTED`, EAR bị đánh dấu không tin được | Lần thu 2: đầu chỉ quay tới khoảng 36° (cộng mắt thì hướng nhìn khoảng 66°), có báo `DISTRACTED`. Góc đầu > 40° (để kích hoạt `EXTREME_YAW`) vẫn chưa thử. |
 
 ## 6. Giới hạn của những gì đã chứng minh
 
@@ -169,7 +188,8 @@ Lần chạy đầu trên webcam, hệ thống báo `FATIGUE` ngay sau khi hiệ
 - **Camera RGB**, không phải hồng ngoại. Ban đêm thật trong xe thì hệ thống sẽ phần lớn ở trạng thái `UNCERTAIN`.
 - Nhãn lấy từ lời nhắc. Thời gian phản ứng (~0.5 s) được loại bằng cách bỏ 0.7 s đầu mỗi đoạn, nên chưa phải nhãn chính xác tới từng frame. Ở lần thu 1, người đóng vai trễ tới khoảng 2 s.
 - **Mọi thay đổi của v2 được chọn sau khi xem dữ liệu lần thu 1**, nên số v2 trên dữ liệu đó là lạc quan. Chỉ lần thu 2 mới là kiểm chứng độc lập.
-- Cúi nhìn điện thoại mà đầu cúi ít (phần lớn là mắt nhìn xuống) thì **chưa bắt được** (mục 5.2).
+- **Nhìn xuống bằng mắt** (điện thoại trên đùi, đồng hồ xe) bị báo `DROWSY` thay vì `DISTRACTED`. Trên camera laptop RGB, hai việc này gần như không phân biệt được (mục 5.2).
+- Số liệu kiểm chứng độc lập chỉ có **1 bản quay main + 1 bản failure** (3 lần nhắm, 5 lần nhìn đi chỗ khác), quá ít để nói về tỉ lệ. Chỉ đủ để thấy hệ thống chạy đúng hoặc sai ở từng ca.
 - **Đóng vai buồn ngủ không phải buồn ngủ thật.** Nhắm mắt có chủ đích dứt khoát hơn vi giấc ngủ thật (mắt sụp từ từ, nửa nhắm nửa mở). PERCLOS dùng cửa sổ 30 s thay cho chuẩn 60 s để demo được trong 10 phút.
 - Khoảng cách đã thấy chạy: 40–60 cm (khoảng cách ngồi trước laptop). Chưa thử xa hơn. Góc quay tin được: \|yaw\| ≤ 40°.
 - Độ trễ đo được không gồm độ trễ phơi sáng và bộ đệm của camera.
