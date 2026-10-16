@@ -1,0 +1,23 @@
+{
+  "machine": "MacBook-Air.local",
+  "time": "2026-10-16T19:47:32",
+  "resolution": "1280x720",
+  "frames": 301,
+  "fps": 29.974094265569747,
+  "latency_ms_p50": 7.63845799997398,
+  "latency_ms_p95": 8.308166999995592,
+  "infer_ms_p50": 5.708417000050758,
+  "face_pct": 100.0,
+  "brightness_median": 123.09906005859375,
+  "sharpness_median": 442.14338662847877,
+  "open_ear": 0.3113275453600442,
+  "dist_cm_median": 48.386289247569216,
+  "yaw_jitter_raw_deg": 0.401940927290609,
+  "yaw_jitter_kf_deg": 0.2965400672247513,
+  "pitch_jitter_raw_deg": 0.3643075641347155,
+  "pitch_jitter_kf_deg": 0.258065457920514,
+  "states": {
+    "CALIBRATING": 153,
+    "OK": 148
+  }
+}

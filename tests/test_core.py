@@ -95,8 +95,10 @@ def run(sm, seq, fps=30):
     return out
 
 
-def face(ear=0.30, yaw=0.0, pitch=0.0, mar=0.1):
-    return {"ear": ear, "yaw": yaw, "pitch": pitch, "mar": mar}
+def face(ear=0.30, yaw=0.0, pitch=0.0, mar=0.1, eye_yaw=0.0, blink=None):
+    # blink mặc định đi cùng EAR: mắt nhắm thì model cũng thấy nhắm
+    blink = (0.8 if ear < 0.15 else 0.1) if blink is None else blink
+    return {"ear": ear, "yaw": yaw, "pitch": pitch, "mar": mar, "eye_yaw": eye_yaw, "blink": blink}
 
 
 def test_calibration_then_ok():
@@ -154,3 +156,45 @@ def test_perclos_needs_enough_history_before_fatigue():
     t_first = next(t for t, o in out if o.state == FATIGUE)
     assert t_first >= 3.0 + DMSConfig().perclos_min_history_s - 0.1
     assert out[-1][1].state == FATIGUE
+
+
+# ---------- Hướng nhìn = đầu + mắt ----------
+def test_eye_in_head_yaw_geometry_and_sign():
+    from dms.features import eye_in_head_yaw
+    px = np.zeros((478, 2))
+    px[33], px[133] = (100, 50), (130, 50)          # khe mắt rộng 30 px
+    px[468] = (115, 50)
+    assert eye_in_head_yaw(px, 468, (33, 133)) == pytest.approx(0.0)
+    px[468] = (118, 50)                             # lệch 0.1 bề rộng sang phải ảnh
+    # sin = 0.1 * 30/12 = 0.25 -> 14.5 độ; sang phải ảnh = về phía trái tài xế = yaw âm
+    assert eye_in_head_yaw(px, 468, (33, 133)) == pytest.approx(-14.48, abs=0.05)
+
+
+def test_head_turned_but_eyes_on_road_is_not_distracted():
+    """Ca thật trong dữ liệu v1: quay đầu 30 độ nhưng mắt liếc ngược lại -16 độ để đọc màn hình."""
+    sm = TemporalStateMachine(DMSConfig())
+    out = run(sm, [(3.5, face(), []), (3.0, face(yaw=30, eye_yaw=-16), [])])
+    assert out[-1][1].state == OK
+
+
+def test_partial_head_turn_plus_eyes_is_distracted():
+    sm = TemporalStateMachine(DMSConfig())
+    out = run(sm, [(3.5, face(), []), (3.0, face(yaw=20, eye_yaw=15), [])])
+    assert out[-1][1].state == DISTRACTED
+
+
+def test_away_hysteresis_survives_jitter_around_threshold():
+    sm = TemporalStateMachine(DMSConfig())
+    jitter = [(0.3, face(yaw=32), []), (0.1, face(yaw=28), [])] * 8   # dao động quanh 30 độ
+    out = run(sm, [(3.5, face(), [])] + jitter)
+    assert DISTRACTED in {o.state for _, o in out}
+
+
+# ---------- Hợp nhất 2 tín hiệu mắt ----------
+def test_low_ear_without_blendshape_agreement_is_not_closed():
+    """Cúi nhìn điện thoại: mí hạ làm EAR thấp nhưng model vẫn thấy mắt mở -> không được báo buồn ngủ."""
+    sm = TemporalStateMachine(DMSConfig())
+    out = run(sm, [(3.5, face(), []), (3.0, face(ear=0.10, blink=0.3), [])])
+    assert DROWSY not in {o.state for _, o in out}
+    out = run(TemporalStateMachine(DMSConfig()), [(3.5, face(), []), (3.0, face(ear=0.10, blink=0.8), [])])
+    assert out[-1][1].state == DROWSY

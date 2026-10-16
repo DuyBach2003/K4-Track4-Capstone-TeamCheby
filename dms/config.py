@@ -17,6 +17,11 @@ class DMSConfig:
     calib_max_abs_yaw: float = 20.0      # chỉ lấy mẫu khi đang nhìn thẳng
     closed_ratio: float = 0.65           # nhắm khi EAR < 0.65 * EAR_mở
     reopen_ratio: float = 0.75           # hysteresis: mở lại khi EAR > 0.75 * EAR_mở
+    # Nhắm = HAI tín hiệu cùng đồng ý: EAR hình học (cá nhân hoá) VÀ blendshape eyeBlink của model.
+    # Dữ liệu v1: chỉ dùng EAR thì cúi nhìn điện thoại / tay che mắt bị coi là nhắm (mí mắt hạ / mặt bị đè).
+    # 0.5 là ngưỡng đặt từ trước khi có dữ liệu (dùng để so sánh trong evaluate.py), không chỉnh theo dữ liệu.
+    blink_closed: float = 0.5
+    blink_reopen: float = 0.4
     fallback_open_ear: float = 0.28      # dùng nếu không hiệu chuẩn được
 
     # ---------- THỜI GIAN (tính theo giây, không theo số frame vì FPS dao động) ----------
@@ -25,7 +30,8 @@ class DMSConfig:
     perclos_window_s: float = 30.0       # chuẩn PERCLOS là 60 s, rút ngắn để demo được trong 10 phút
     perclos_warn: float = 0.15           # > 15% thời gian nhắm mắt = mệt mỏi
     perclos_min_history_s: float = 15.0  # cần ít nhất 15 s dữ liệu mới kết luận, nếu không vài cái chớp mắt đã > 15%
-    distract_yaw_deg: float = 30.0       # quay đầu > 30 độ = không nhìn đường
+    distract_yaw_deg: float = 30.0       # HƯỚNG NHÌN (đầu + mắt) lệch ngang > 30 độ = không nhìn đường
+    distract_hysteresis_deg: float = 5.0 # đã lệch thì phải về dưới 25 độ mới tính là nhìn lại đường
     distract_pitch_down_deg: float = -20.0  # cúi > 20 độ = nhìn điện thoại / bảng táp-lô
     distract_alarm_s: float = 2.0        # Euro NCAP coi >= 3 s là xao nhãng dài; demo dùng 2 s
     yawn_mar: float = 0.55

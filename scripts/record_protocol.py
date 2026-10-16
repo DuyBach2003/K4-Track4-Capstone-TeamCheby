@@ -8,8 +8,9 @@ Tạo ra trong recordings/:
     <protocol>_<name>_<time>_frames.csv   timestamp thật từng frame (FPS webcam không đều)
     <protocol>_<name>_<time>_labels.csv   các đoạn nhãn (start, end, eye, attention, prompt, expect)
 
-Mỗi lần đổi đoạn sẽ có tiếng "tink" để người đóng vai biết mở mắt khi đang nhắm.
-Lời nhắc của đoạn kế tiếp hiện trước 2 s để kịp chuẩn bị.
+Mỗi lần đổi đoạn, lời nhắc được ĐỌC TO bằng giọng tiếng Việt của macOS (`say -v Linh`), nên người đóng vai
+không cần nhìn màn hình: nhắm mắt thì nghe "Mở mắt", nhìn sang bên thì nhìn hẳn vào vật thật.
+(v1 chỉ có chữ trên màn hình -> người đóng vai liếc lại màn hình để đọc, làm nhãn sai.)
 """
 import argparse
 import csv
@@ -27,9 +28,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from protocols import segments  # noqa: E402
 
 
-def beep():
+def speak(text):
+    """Không chặn vòng lặp ghi hình. Không có giọng đọc thì kêu "tink"."""
+    if platform.system() == "Darwin" and shutil.which("say"):
+        subprocess.Popen(["say", "-v", "Linh", "-r", "210", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
     snd = "/System/Library/Sounds/Tink.aiff"
-    if platform.system() == "Darwin" and shutil.which("afplay") and os.path.exists(snd):
+    if shutil.which("afplay") and os.path.exists(snd):
         subprocess.Popen(["afplay", snd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
         print("\a", end="", flush=True)
@@ -70,7 +75,8 @@ def main():
         left = args.countdown - (time.perf_counter() - t0)
         cv2.putText(vis, f"Bat dau sau {left:.0f}s - ngoi nhu dang lai xe", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 1,
                     (0, 255, 255), 2)
-        cv2.putText(vis, "Dau tien: " + segs[0]["prompt"], (30, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        cv2.putText(vis, "Lam theo GIONG DOC. Nhin di cho khac = nhin vat that, KHONG nhin man hinh", (30, 110),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         cv2.imshow("Thu du lieu DMS", vis)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             return
@@ -90,7 +96,7 @@ def main():
         cur = next(k for k, s in enumerate(segs) if s["start"] <= t < s["end"]) if t < total else len(segs) - 1
         if cur != seg_i:
             seg_i = cur
-            beep()
+            speak(segs[cur]["speech"])
         s = segs[cur]
         vis = cv2.flip(frame, 1)
         color = (0, 0, 255) if s["eye"] == "closed" or s["attention"] == "away" else (0, 200, 0)

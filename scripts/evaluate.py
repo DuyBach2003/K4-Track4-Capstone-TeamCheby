@@ -7,8 +7,8 @@
 Cách chấm (giải thích được khi hội đồng hỏi):
   * Nhãn = lời nhắc trên màn hình. Người cần ~0.5 s để phản ứng sau tiếng "tink", nên bỏ 0.7 s đầu mỗi đoạn
     khi chấm theo frame (REACTION_S).
-  * Theo frame: mắt nhắm/mở, so 2 cách: (1) EAR hình học + ngưỡng cá nhân hoá (hệ thống dùng),
-    (2) blendshape eyeBlink của MediaPipe (một đầu ra "học" sẵn) > 0.5.
+  * Theo frame: mắt nhắm/mở, so 2 cách: (1) hệ thống (EAR cá nhân hoá VÀ blendshape cùng đồng ý),
+    (2) chỉ blendshape eyeBlink của MediaPipe (một đầu ra "học" sẵn) > 0.5.
   * Theo sự kiện: mỗi đoạn mong đợi DROWSY/DISTRACTED có báo động không, trễ bao lâu kể từ lúc bắt đầu đoạn
     (trễ này GỒM cả thời gian phản ứng của người đóng vai + ngưỡng 1 s / 2 s cố ý của hệ thống).
   * Báo động giả: số lần chuyển sang DROWSY/DISTRACTED trong các đoạn mong đợi OK.
@@ -213,8 +213,8 @@ def write_markdown(m, path, video):
          "", "## 1. Mắt nhắm/mở theo frame", "",
          f"Bỏ {REACTION_S} s đầu mỗi đoạn (thời gian phản ứng), bỏ đoạn chớp mắt tự do/ngáp/quay đầu.", "",
          "| Phương pháp | Precision | Recall | F1 | Accuracy | n frame |", "|---|---|---|---|---|---|",
-         f"| EAR + ngưỡng cá nhân hoá (hệ thống) | {f(e1['precision'])} | {f(e1['recall'])} | {f(e1['f1'])} | {f(e1['accuracy'])} | {e1['n']} |",
-         f"| Blendshape eyeBlink > 0.5 (MediaPipe) | {f(e2['precision'])} | {f(e2['recall'])} | {f(e2['f1'])} | {f(e2['accuracy'])} | {e2['n']} |",
+         f"| Hệ thống: EAR cá nhân hoá VÀ blendshape (cả 2 mắt) | {f(e1['precision'])} | {f(e1['recall'])} | {f(e1['f1'])} | {f(e1['accuracy'])} | {e1['n']} |",
+         f"| Chỉ blendshape eyeBlink > 0.5 (MediaPipe) | {f(e2['precision'])} | {f(e2['recall'])} | {f(e2['f1'])} | {f(e2['accuracy'])} | {e2['n']} |",
          "", "## 2. Theo sự kiện (cảnh báo có kịp không)", "",
          "| Đoạn | Mong đợi | Bắt được | Trễ từ lúc có lời nhắc (s) |", "|---|---|---|---|"]
     for ev in m["events"]:
@@ -231,7 +231,7 @@ def write_markdown(m, path, video):
           f"- Độ rung góc đầu giữa 2 frame liên tiếp khi ngồi yên (std của chênh lệch): yaw thô {f(m['yaw_jitter_raw_deg'])}° → Kalman {f(m['yaw_jitter_kf_deg'])}°; "
           f"pitch thô {f(m['pitch_jitter_raw_deg'])}° → Kalman {f(m['pitch_jitter_kf_deg'])}°",
           "", "## 4. Từng đoạn (dùng để tìm ca lỗi)", "",
-          "| t (s) | Lời nhắc | Mong đợi | Trạng thái chính | Báo động | Thấy mặt % | EAR TB | % nhắm | |yaw| | pitch | % không chắc | Đạt |",
+          "| t (s) | Lời nhắc | Mong đợi | Trạng thái chính | Báo động | Thấy mặt % | EAR TB | % nhắm | \\|nhìn ngang\\| | pitch đầu | % không chắc | Đạt |",
           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for s in m["segments"]:
         ok_ = {True: "✅", False: "❌", None: "–"}[s["pass"]]
@@ -247,7 +247,7 @@ def plot(rows, segs, path):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     t = np.array([r["t"] for r in rows])
-    g = lambda k: np.array([r[k] for r in rows], float)  # noqa: E731
+    g = lambda k: np.array([r.get(k, np.nan) for r in rows], float)  # noqa: E731  (log cũ chưa có eye_yaw)
     fig, ax = plt.subplots(4, 1, figsize=(13, 9), sharex=True,
                            gridspec_kw={"height_ratios": [3, 2, 2, 0.8]})
     for s in segs:
@@ -260,9 +260,10 @@ def plot(rows, segs, path):
     ax[0].plot(t, 0.4 * g("blink_bs"), lw=0.8, alpha=0.6, color="#7a4cc2", label="blendshape eyeBlink × 0.4")
     ax[0].set_ylabel("EAR"); ax[0].legend(loc="upper right", fontsize=8); ax[0].set_ylim(0, 0.45)
     ax[0].set_title("Nền đỏ = nhãn nhắm mắt, nền cam = nhãn nhìn đi chỗ khác")
-    ax[1].plot(t, g("yaw_rel"), lw=1, label="yaw lệch (Kalman)")
-    ax[1].plot(t, g("pitch_rel"), lw=1, label="pitch lệch (Kalman)")
-    ax[1].plot(t, g("yaw_raw") - np.nanmedian(g("yaw_raw")[:60]), lw=0.5, alpha=0.4, label="yaw thô")
+    ax[1].plot(t, g("yaw_rel"), lw=1, label="hướng nhìn ngang lệch (đầu + mắt)")
+    ax[1].plot(t, g("eye_yaw"), lw=0.8, alpha=0.7, label="góc mắt (mống mắt)")
+    ax[1].plot(t, g("pitch_rel"), lw=1, label="pitch đầu lệch (Kalman)")
+    ax[1].plot(t, g("yaw_raw") - np.nanmedian(g("yaw_raw")[:60]), lw=0.5, alpha=0.4, label="yaw đầu thô")
     for y in (30, -30, -20):
         ax[1].axhline(y, ls=":", color="gray", lw=0.8)
     ax[1].set_ylabel("độ"); ax[1].legend(loc="upper right", fontsize=8)

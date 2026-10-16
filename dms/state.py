@@ -81,7 +81,7 @@ class TemporalStateMachine:
         if self.open_ear is None:
             if face is not None and eye_reliable and abs(face["yaw"]) < cfg.calib_max_abs_yaw:
                 self.calib_samples.append(face["ear"])
-                self.pose_samples.append((face["yaw"], face["pitch"]))
+                self.pose_samples.append((face["yaw"] + face.get("eye_yaw", 0.0), face["pitch"]))
                 self.calib_time += dt
             out.calib_progress = min(1.0, self.calib_time / cfg.calib_seconds)
             if self.calib_time >= cfg.calib_seconds and len(self.calib_samples) >= 10:
@@ -101,11 +101,13 @@ class TemporalStateMachine:
         # ----- Mắt -----
         if eye_reliable:
             ear = face["ear"]
+            blink = face.get("blink", float("nan"))
+            has_blink = blink == blink   # không phải NaN
             was_closed = self.eyes_closed
             if self.eyes_closed:
-                self.eyes_closed = ear < reopen_thr
+                self.eyes_closed = ear < reopen_thr and (not has_blink or blink > cfg.blink_reopen)
             else:
-                self.eyes_closed = ear < close_thr
+                self.eyes_closed = ear < close_thr and (not has_blink or blink > cfg.blink_closed)
             if self.eyes_closed and not was_closed:
                 self.closed_since = t
             if was_closed and not self.eyes_closed:
@@ -125,9 +127,16 @@ class TemporalStateMachine:
 
         # ----- Hướng nhìn -----
         if face is not None:
-            out.yaw_rel = face["yaw"] - self.neutral[0]
+            # Hướng nhìn = góc đầu + góc mắt. Lúc nhắm mắt (hoặc mắt không tin được) vị trí mống mắt vô nghĩa
+            # -> chỉ dùng góc đầu.
+            eye_yaw = face.get("eye_yaw", 0.0) if (eye_reliable and not self.eyes_closed) else 0.0
+            out.yaw_rel = face["yaw"] + eye_yaw - self.neutral[0]
             out.pitch_rel = face["pitch"] - self.neutral[1]
-            away = abs(out.yaw_rel) > cfg.distract_yaw_deg or out.pitch_rel < cfg.distract_pitch_down_deg
+            # Hysteresis: đang "nhìn đi chỗ khác" thì phải về hẳn dưới ngưỡng - 5 độ mới tính là đã nhìn lại.
+            # Thiếu nó, 1 frame dao động quanh 30 độ là đồng hồ 2 s bị đặt lại về 0 (đã xảy ra ở dữ liệu v1).
+            margin = cfg.distract_hysteresis_deg if self.away_since is not None else 0.0
+            away = (abs(out.yaw_rel) > cfg.distract_yaw_deg - margin
+                    or out.pitch_rel < cfg.distract_pitch_down_deg + margin)
             if away and self.away_since is None:
                 self.away_since = t
             elif not away:

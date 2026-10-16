@@ -3,8 +3,9 @@
     camera frame (t)
         |  HỌC: MediaPipe FaceLandmarker (pretrained, 478 mốc 3D + 52 blendshape)
         v
-    478 mốc (pixel)  --BIỂU DIỄN-->  EAR trái/phải, MAR
-        |  HÌNH HỌC: solvePnP 6 điểm + K xấp xỉ  -> yaw/pitch/roll, khoảng cách (cm)
+    478 mốc (pixel)  --BIỂU DIỄN-->  EAR trái/phải, MAR ; blendshape eyeBlink
+        |  HÌNH HỌC: solvePnP 13 điểm cứng + K xấp xỉ -> yaw/pitch/roll, khoảng cách (cm)
+        |            mống mắt giữa 2 khoé + mô hình nhãn cầu -> góc mắt; hướng nhìn = góc đầu + góc mắt
         v
     THỜI GIAN: Kalman (góc đầu, dt thật) ; BẤT ĐỊNH: độ sáng, độ nét, |yaw| lớn, mất mặt
         v
@@ -26,8 +27,8 @@ from .quality import roi_quality, uncertainty_reasons
 from .state import TemporalStateMachine
 
 LOG_FIELDS = [
-    "t", "frame", "face", "ear_l", "ear_r", "ear", "blink_bs", "mar",
-    "yaw_raw", "pitch_raw", "roll_raw", "yaw", "pitch", "roll", "yaw_rel", "pitch_rel", "pose_std",
+    "t", "frame", "face", "ear_l", "ear_r", "ear", "blink_l", "blink_r", "blink_bs", "mar",
+    "yaw_raw", "pitch_raw", "roll_raw", "yaw", "pitch", "roll", "eye_yaw", "yaw_rel", "pitch_rel", "pose_std",
     "dist_cm", "brightness", "sharpness", "eyes_closed", "closed_s", "away_s",
     "perclos", "yawns", "blinks", "open_ear", "closed_thr", "state", "reasons",
     "infer_ms", "latency_ms",
@@ -97,7 +98,7 @@ class DMSPipeline:
             bs = {c.category_name: c.score for c in res.face_blendshapes[0]} if res.face_blendshapes else {}
             r.update(face=1, px=px, bbox=bbox, brightness=brightness, sharpness=sharpness,
                      ear_l=feats["ear_l"], ear_r=feats["ear_r"], mar=feats["mar"],
-                     blink_bs=(bs.get("eyeBlinkLeft", np.nan) + bs.get("eyeBlinkRight", np.nan)) / 2)
+                     blink_l=bs.get("eyeBlinkLeft", np.nan), blink_r=bs.get("eyeBlinkRight", np.nan))
             if pose is not None:
                 yaw, pitch, roll, rvec, tvec = pose
                 r.update(yaw_raw=yaw, pitch_raw=pitch, roll_raw=roll, rvec=rvec, tvec=tvec)
@@ -105,14 +106,22 @@ class DMSPipeline:
                 r["pitch"] = self.kf["pitch"].update(pitch, dt)
                 r["roll"] = self.kf["roll"].update(roll, dt)
                 r["dist_cm"] = distance_cm(tvec)
-            # Khi quay đầu, mắt xa camera bị co ngắn và che khuất -> chỉ tin mắt gần camera hơn
+            # Khi quay đầu, mắt xa camera bị co ngắn và che khuất -> chỉ tin mắt gần camera hơn (cả EAR lẫn mống mắt)
             yaw_now = r["yaw"] if not np.isnan(r["yaw"]) else 0.0
             if abs(yaw_now) > 20:
-                r["ear"] = feats["ear_l"] if yaw_now > 0 else feats["ear_r"]
+                side = "l" if yaw_now > 0 else "r"
+                r["ear"], r["eye_yaw"] = feats["ear_" + side], feats["eye_yaw_" + side]
+                # Blendshape đặt tên theo mắt của người: "Left" = mắt trái của người = bên phải ảnh = ear_l
+                # (kiểm tra trên đoạn tay che mắt ở dữ liệu v1; chênh lệch nhỏ nên là bằng chứng yếu)
+                r["blink_bs"] = r["blink_" + side]
             else:
                 r["ear"] = (feats["ear_l"] + feats["ear_r"]) / 2
-            face = {"ear": r["ear"], "mar": r["mar"], "yaw": yaw_now,
-                    "pitch": r["pitch"] if not np.isnan(r["pitch"]) else 0.0}
+                r["eye_yaw"] = (feats["eye_yaw_l"] + feats["eye_yaw_r"]) / 2
+                # Buồn ngủ là nhắm CẢ HAI mắt. Lấy min để che 1 mắt bằng tay / nháy 1 mắt không thành "nhắm"
+                # (ca lỗi thật ở dữ liệu v1: tay che 1 mắt -> báo DROWSY giả).
+                r["blink_bs"] = min(r["blink_l"], r["blink_r"])
+            face = {"ear": r["ear"], "mar": r["mar"], "yaw": yaw_now, "eye_yaw": r["eye_yaw"],
+                    "blink": r["blink_bs"], "pitch": r["pitch"] if not np.isnan(r["pitch"]) else 0.0}
             self.face_lost_since = None
         else:
             if self.face_lost_since is None:

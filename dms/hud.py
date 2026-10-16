@@ -72,10 +72,11 @@ class HUD:
 
         # Bảng số đo
         lines = [
-            f"EAR {_fmt(r['ear'])}  (nguong {_fmt(r.get('closed_thr'))})  nham {_fmt(r['closed_s'], '{:.1f}')}s",
+            f"EAR {_fmt(r['ear'])} (nguong {_fmt(r.get('closed_thr'))})  model {_fmt(r.get('blink_bs'))} (>0.5)"
+            f"  nham {_fmt(r['closed_s'], '{:.1f}')}s",
             f"PERCLOS {_fmt(100 * r['perclos'], '{:.0f}')}%  chop mat {int(r['blinks'] or 0)}  ngap {int(r['yawns'] or 0)}",
-            f"lech nhin duong: yaw {_fmt(r.get('yaw_rel'), '{:+.0f}')} pitch {_fmt(r.get('pitch_rel'), '{:+.0f}')}"
-            f" (tuyet doi {_fmt(r['yaw'], '{:+.0f}')}/{_fmt(r['pitch'], '{:+.0f}')})"
+            f"huong nhin lech: ngang {_fmt(r.get('yaw_rel'), '{:+.0f}')} = dau {_fmt(r['yaw'], '{:+.0f}')}"
+            f" + mat {_fmt(r.get('eye_yaw'), '{:+.0f}')} (tru tu the goc)  doc {_fmt(r.get('pitch_rel'), '{:+.0f}')}"
             f"  +-{_fmt(r.get('pose_std'), '{:.1f}')}",
             f"khoang cach {_fmt(r['dist_cm'], '{:.0f}')} cm   sang {_fmt(r['brightness'], '{:.0f}')}"
             f"  net {_fmt(r['sharpness'], '{:.0f}')}",

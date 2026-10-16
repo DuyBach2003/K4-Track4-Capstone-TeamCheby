@@ -9,6 +9,13 @@ import numpy as np
 RIGHT_EYE = [33, 160, 158, 133, 153, 144]   # mắt phải của tài xế (bên trái ảnh)
 LEFT_EYE = [362, 385, 387, 263, 373, 380]
 MOUTH = [78, 308, 13, 14]                    # khoé trái, khoé phải, môi trên trong, môi dưới trong
+# Tâm mống mắt (chỉ có ở model 478 mốc) và 2 khoé của cùng mắt đó, theo thứ tự trái -> phải trên ảnh
+RIGHT_IRIS, RIGHT_CORNERS = 468, (33, 133)
+LEFT_IRIS, LEFT_CORNERS = 473, (362, 263)
+
+# Mô hình nhãn cầu: khe mắt (khoé - khoé) ~ 30 mm, bán kính nhãn cầu ~ 12 mm.
+# Mống mắt lệch d mm khỏi giữa khe mắt <=> mắt xoay asin(d / 12) => sin = (lệch / bề rộng khe) * 30/12.
+EYE_WIDTH_OVER_RADIUS = 30.0 / 12.0
 
 
 def to_pixels(landmarks, width: int, height: int) -> np.ndarray:
@@ -34,6 +41,22 @@ def mouth_aspect_ratio(pts: np.ndarray) -> float:
     return float(np.linalg.norm(top - bottom) / width)
 
 
+def eye_in_head_yaw(px: np.ndarray, iris: int, corners) -> float:
+    """HÌNH HỌC: góc mắt xoay ngang trong hốc mắt (độ), cùng quy ước dấu với yaw của đầu.
+
+    Lý do cần: khi nhìn sang bên, người ta chỉ quay đầu một phần, phần còn lại là mắt. Ngược lại, người quay đầu
+    nhưng mắt vẫn nhìn đường thì không xao nhãng. Dữ liệu thật (reports/v1_*) cho thấy cả hai trường hợp.
+    Tỉ số lệch/bề rộng khe mắt không đổi khi mặt xa/gần hay bị co ngắn do quay đầu (cả hai cùng co).
+    """
+    a, b = px[corners[0]], px[corners[1]]
+    width = np.linalg.norm(b - a)
+    if width < 1e-6:
+        return 0.0
+    offset = float((px[iris] - (a + b) / 2) @ (b - a)) / width ** 2
+    # Mống mắt lệch sang PHẢI ảnh = mắt xoay về phía TRÁI của tài xế = yaw âm (yaw > 0 là mặt hướng về trái ảnh)
+    return -float(np.degrees(np.arcsin(np.clip(offset * EYE_WIDTH_OVER_RADIUS, -1.0, 1.0))))
+
+
 def face_features(px: np.ndarray) -> dict:
     ear_r = eye_aspect_ratio(px[RIGHT_EYE])
     ear_l = eye_aspect_ratio(px[LEFT_EYE])
@@ -41,6 +64,8 @@ def face_features(px: np.ndarray) -> dict:
         "ear_r": ear_r,
         "ear_l": ear_l,
         "mar": mouth_aspect_ratio(px[MOUTH]),
+        "eye_yaw_r": eye_in_head_yaw(px, RIGHT_IRIS, RIGHT_CORNERS),
+        "eye_yaw_l": eye_in_head_yaw(px, LEFT_IRIS, LEFT_CORNERS),
     }
 
 
